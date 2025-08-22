@@ -36,39 +36,73 @@ MLflow Tracking Server → Raw Runs → Enriched Metrics → Platform/App Aggreg
 
 ## Development Commands
 
-Since this is a Python project with no standard package management files visible, use these patterns for development:
+This project uses **uv** for fast dependency management and **ruff** for linting/formatting.
+
+### Initial Setup
+```bash
+# Install dependencies with uv
+uv sync --dev
+
+# Install pre-commit hooks
+uv run pre-commit install
+
+# Validate Dagster definitions
+uv run dagster definitions validate
+```
+
+### Code Quality
+```bash
+# Lint and auto-fix with ruff
+uv run ruff check . --fix
+
+# Format code with ruff
+uv run ruff format .
+
+# Type checking with mypy
+uv run mypy dagster_pipeline shared
+
+# Spell checking
+uv run cspell "**/*.py" "**/*.md" "**/*.toml" "**/*.yaml"
+
+# Run all pre-commit hooks
+uv run pre-commit run --all-files
+```
 
 ### Running the Pipeline
 ```bash
 # Start Dagster UI for development
-dagster dev
+uv run dagster dev --host 0.0.0.0 --port 3000
 
 # Run specific job
-dagster job execute -j delta_ingestion_job
+uv run dagster job execute -j delta_ingestion_job
 
 # Materialize specific assets
-dagster asset materialize --select raw_mlflow_runs
-```
+uv run dagster asset materialize --select raw_mlflow_runs
 
-### Development Setup
-```bash
-# Install dependencies (assuming requirements.txt exists)
-pip install -r requirements.txt
-
-# Set up environment
-cp .env.example .env
-# Edit .env with your configuration values
+# Validate definitions
+uv run dagster definitions validate
 ```
 
 ### Testing
 ```bash
-# Run tests (standard Python patterns)
-python -m pytest
-pytest tests/
+# Run all tests
+uv run pytest tests/ -v
 
-# Test specific components
-python -m pytest tests/test_assets.py
+# Run tests with coverage
+uv run pytest tests/ --cov=dagster_pipeline --cov=shared --cov-report=html
+
+# Run fast tests only (excluding slow/integration tests)
+uv run pytest tests/ -m "not slow" -x --tb=short
+
+# Run specific test file
+uv run pytest tests/test_assets.py -v
 ```
+
+### VS Code Integration
+- Use `Ctrl+Shift+P` → "Tasks: Run Task" for common development tasks
+- Debug configurations available for Dagster dev server, jobs, and assets
+- Ruff formatting and linting integrated with save actions
+- MyPy type checking enabled in editor
 
 ## Configuration Requirements
 

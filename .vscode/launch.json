@@ -1,0 +1,149 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Dagster Dev Server",
+      "type": "python",
+      "request": "launch",
+      "module": "dagster",
+      "args": [
+        "dev",
+        "--working-directory",
+        "${workspaceFolder}",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "3000"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "DAGSTER_HOME": "${workspaceFolder}/.dagster",
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Dagster Job: Delta Ingestion",
+      "type": "python", 
+      "request": "launch",
+      "module": "dagster",
+      "args": [
+        "job",
+        "execute",
+        "-j",
+        "delta_ingestion_job",
+        "--config",
+        "${workspaceFolder}/config/delta_config.yaml"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "DAGSTER_HOME": "${workspaceFolder}/.dagster",
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Dagster Asset: MLflow Ingestion",
+      "type": "python",
+      "request": "launch", 
+      "module": "dagster",
+      "args": [
+        "asset",
+        "materialize",
+        "--select",
+        "raw_mlflow_runs"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "DAGSTER_HOME": "${workspaceFolder}/.dagster",
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: Debug Tests",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${workspaceFolder}/tests",
+        "-v",
+        "--tb=short"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
+    },
+    {
+      "name": "Python: Debug Current Test File",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest", 
+      "args": [
+        "${file}",
+        "-v",
+        "--tb=short",
+        "-s"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
+    },
+    {
+      "name": "MLflow UI",
+      "type": "python",
+      "request": "launch",
+      "module": "mlflow",
+      "args": [
+        "ui",
+        "--host",
+        "0.0.0.0", 
+        "--port",
+        "5000"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Attach to Remote Debugger",
+      "type": "python",
+      "request": "attach",
+      "host": "localhost",
+      "port": 5678,
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/app"
+        }
+      ]
+    }
+  ]
+}

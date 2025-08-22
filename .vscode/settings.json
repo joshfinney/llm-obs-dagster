@@ -1,0 +1,130 @@
+{
+  // Python Configuration
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.terminal.activateEnvInCurrentTerminal": true,
+
+  // Ruff Configuration
+  "ruff.enable": true,
+  "ruff.lint.enable": true,
+  "ruff.format.enable": true,
+  "ruff.organizeImports": true,
+  "ruff.fixAll": true,
+  "ruff.codeAction.fixViolation": {
+    "enable": true
+  },
+  "ruff.codeAction.disableRuleComment": {
+    "enable": true
+  },
+
+  // Editor Configuration
+  "editor.formatOnSave": true,
+  "editor.formatOnType": false,
+  "editor.formatOnPaste": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
+  },
+  "editor.rulers": [88],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.trimAutoWhitespace": true,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+
+  // Python Language Server
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.autoFormatStrings": true,
+  "python.analysis.completeFunctionParens": true,
+  "python.analysis.indexing": true,
+
+  // Testing Configuration
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests",
+    "--tb=short",
+    "-v"
+  ],
+  "python.testing.autoTestDiscoverOnSaveEnabled": true,
+
+  // MyPy Configuration
+  "mypy-type-checker.enable": true,
+  "mypy-type-checker.args": [
+    "--strict",
+    "--ignore-missing-imports"
+  ],
+
+  // Spell Checker
+  "cSpell.enabled": true,
+  "cSpell.showCommandsInEditorContextMenu": true,
+  "cSpell.showSuggestionsLinkInEditorContextMenu": true,
+  "cSpell.enableFiletypes": [
+    "python",
+    "markdown",
+    "yaml",
+    "toml",
+    "json"
+  ],
+
+  // File Associations
+  "files.associations": {
+    "*.toml": "toml",
+    "*.yaml": "yaml",
+    "*.yml": "yaml",
+    "pyproject.toml": "toml",
+    ".env*": "properties"
+  },
+
+  // Dagster Specific
+  "files.watcherExclude": {
+    "**/.dagster/**": true,
+    "**/dagster_home/**": true,
+    "**/logs/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.ruff_cache/**": true
+  },
+
+  // Terminal Configuration
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  "terminal.integrated.env.osx": {
+    "DAGSTER_HOME": "${workspaceFolder}/.dagster"
+  },
+
+  // Extension Recommendations
+  "extensions.recommendations": [
+    "ms-python.python",
+    "ms-python.mypy-type-checker",
+    "charliermarsh.ruff",
+    "streetsidesoftware.code-spell-checker",
+    "ms-python.debugpy",
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml"
+  ],
+
+  // Git Configuration
+  "git.ignoreLimitWarning": true,
+  "git.autofetch": true,
+
+  // Search Configuration
+  "search.exclude": {
+    "**/.dagster": true,
+    "**/dagster_home": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/htmlcov": true,
+    "**/.coverage": true,
+    "**/node_modules": true,
+    "**/venv": true,
+    "**/.venv": true
+  },
+  "cSpell.words": [
+    "dagster"
+  ]
+}

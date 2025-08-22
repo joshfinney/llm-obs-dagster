@@ -1,6 +1,7 @@
-from dagster import resource, Field, String
+from dagster import Field, String, resource
 import mlflow
 from mlflow.tracking import MlflowClient
+
 
 @resource(
     config_schema={
@@ -9,13 +10,12 @@ from mlflow.tracking import MlflowClient
     }
 )
 def mlflow_resource(context):
-    """
-    MLflow client resource with connection pooling
+    """MLflow client resource with connection pooling
     Methods to implement:
     - list_experiments()
     - search_runs(experiment_ids, filter_string, max_results)
     - get_metric_history(run_id, metric_key)
-    - get_run(run_id)
+    - get_run(run_id).
     """
     mlflow.set_tracking_uri(context.resource_config["tracking_uri"])
     return MlflowClient(
