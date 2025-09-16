@@ -324,22 +324,35 @@ def metric_timeseries(
 
     context.log.info("Creating metric time series data...")
 
-    # Log param key analysis for debugging
+    # Debug param data structure to understand casting issues
     if not enriched_clean.empty and 'params' in enriched_clean.columns:
         param_keys = set()
         null_count = 0
         total_count = len(enriched_clean)
+        value_types = {}
+        sample_values = {}
 
         for params_dict in enriched_clean['params'].dropna():
             if isinstance(params_dict, dict):
                 param_keys.update(params_dict.keys())
+                for key, value in params_dict.items():
+                    if key not in value_types:
+                        value_types[key] = set()
+                        sample_values[key] = []
+                    value_types[key].add(type(value).__name__)
+                    if len(sample_values[key]) < 3:  # Keep 3 samples per key
+                        sample_values[key].append(repr(value))
             else:
                 null_count += 1
 
         context.log.info(
-            f"Param analysis: Found keys {sorted(param_keys)}, "
+            f"Param analysis: Found {len(param_keys)} keys, "
             f"null percentage: {(null_count/total_count)*100:.1f}%"
         )
+        for key in sorted(param_keys):
+            types_str = ', '.join(sorted(value_types.get(key, set())))
+            samples_str = ', '.join(sample_values.get(key, []))
+            context.log.info(f"  {key}: types={types_str}, samples=[{samples_str}]")
 
     timeseries_query = """
     SELECT
@@ -359,10 +372,19 @@ def metric_timeseries(
         unit,
         description,
         -- Additional context for hover tooltips (only use verified keys)
+        -- HOW TO ADD NEW PARAM KEYS:
+        -- 1. Check debug logs above to see available keys and their types/samples
+        -- 2. Add new key only if it appears in >80% of records (low null rate)
+        -- 3. Use CASE to handle null values: CASE WHEN params['key'] IS NOT NULL THEN CAST(params['key'] AS VARCHAR) ELSE 'unknown' END
+        -- 4. Test with small sample first, then deploy to full dataset
         CASE WHEN params IS NOT NULL THEN
             json_object(
-                'model', TRY_CAST(params['model'] AS VARCHAR),
-                'eval_type', TRY_CAST(params['eval_type'] AS VARCHAR)
+                'model', CASE WHEN params['model'] IS NOT NULL
+                            THEN CAST(params['model'] AS VARCHAR)
+                            ELSE 'unknown' END,
+                'eval_type', CASE WHEN params['eval_type'] IS NOT NULL
+                                THEN CAST(params['eval_type'] AS VARCHAR)
+                                ELSE 'unknown' END
             )
         ELSE
             json_object()
