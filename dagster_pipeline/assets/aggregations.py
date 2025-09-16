@@ -1,6 +1,7 @@
+from collections.abc import Generator
 import logging
 
-from dagster import AssetIn, Output, asset
+from dagster import AssetExecutionContext, AssetIn, Output, asset
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,9 @@ logger = logging.getLogger(__name__)
     group_name="aggregations",
     description="Platform-level aggregations for traffic light dashboard"
 )
-def platform_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
+def platform_summary(
+    context: AssetExecutionContext, enriched: pd.DataFrame
+) -> Generator[Output[pd.DataFrame], None, None]:
     """Create platform-level aggregations for main dashboard.
 
     Produces:
@@ -24,12 +27,23 @@ def platform_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
     """
     if enriched.empty:
         context.log.warning("No enriched data for platform aggregations")
-        return pd.DataFrame()
+        yield Output(pd.DataFrame(), metadata={"records_generated": 0})
+        return
 
     duckdb_conn = context.resources.duckdb
 
+    # Clean params column to remove duplicate keys before registering
+    enriched_clean = enriched.copy()
+    if 'params' in enriched_clean.columns:
+        enriched_clean['params'] = enriched_clean['params'].apply(
+            lambda x: (
+                {k.lower(): v for k, v in (x or {}).items()}
+                if isinstance(x, dict) else x
+            )
+        )
+
     # Register enriched DataFrame as a DuckDB table
-    duckdb_conn.register('enriched_metrics', enriched)
+    duckdb_conn.register('enriched_metrics', enriched_clean)
 
     context.log.info("Creating platform-level aggregations...")
 
@@ -129,7 +143,9 @@ def platform_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
     group_name="aggregations",
     description="Application-level aggregations for drill-down views"
 )
-def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
+def application_summary(
+    context: AssetExecutionContext, enriched: pd.DataFrame
+) -> Generator[Output[pd.DataFrame], None, None]:
     """Create application-level aggregations for detailed views.
 
     Produces per-application:
@@ -139,10 +155,22 @@ def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
     """
     if enriched.empty:
         context.log.warning("No enriched data for application aggregations")
-        return pd.DataFrame()
+        yield Output(pd.DataFrame(), metadata={"records_generated": 0})
+        return
 
     duckdb_conn = context.resources.duckdb
-    duckdb_conn.register('enriched_metrics', enriched)
+
+    # Clean params column to remove duplicate keys before registering
+    enriched_clean = enriched.copy()
+    if 'params' in enriched_clean.columns:
+        enriched_clean['params'] = enriched_clean['params'].apply(
+            lambda x: (
+                {k.lower(): v for k, v in (x or {}).items()}
+                if isinstance(x, dict) else x
+            )
+        )
+
+    duckdb_conn.register('enriched_metrics', enriched_clean)
 
     context.log.info("Creating application-level aggregations...")
 
@@ -208,9 +236,9 @@ def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
         s.warning_runs,
         s.healthy_runs,
         s.pass_rate,
-        -- Aggregate metrics summary as JSON
+        -- Aggregate metrics summary as JSON (filter out null keys)
         json_group_object(
-            ms.metric_name,
+            COALESCE(ms.metric_name, 'unknown'),
             json_object(
                 'latest_value', ms.latest_value,
                 'latest_status', ms.latest_status,
@@ -219,7 +247,7 @@ def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
                 'display_name', ms.display_name,
                 'unit', ms.unit
             )
-        ) as metrics_summary,
+        ) FILTER (WHERE ms.metric_name IS NOT NULL) as metrics_summary,
         CAST(CURRENT_TIMESTAMP AS TIMESTAMP) as aggregation_timestamp
     FROM app_summary s
     LEFT JOIN app_metrics_summary ms ON s.application = ms.application
@@ -264,7 +292,9 @@ def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
     group_name="aggregations",
     description="Time series data for metric plots with hover details"
 )
-def metric_timeseries(context, enriched: pd.DataFrame) -> pd.DataFrame:
+def metric_timeseries(
+    context: AssetExecutionContext, enriched: pd.DataFrame
+) -> Generator[Output[pd.DataFrame], None, None]:
     """Create time series points for frontend metric plots.
 
     Each row represents a point on a time series plot with:
@@ -274,10 +304,22 @@ def metric_timeseries(context, enriched: pd.DataFrame) -> pd.DataFrame:
     """
     if enriched.empty:
         context.log.warning("No enriched data for timeseries")
-        return pd.DataFrame()
+        yield Output(pd.DataFrame(), metadata={"timeseries_points": 0})
+        return
 
     duckdb_conn = context.resources.duckdb
-    duckdb_conn.register('enriched_metrics', enriched)
+
+    # Clean params column to remove duplicate keys before registering
+    enriched_clean = enriched.copy()
+    if 'params' in enriched_clean.columns:
+        enriched_clean['params'] = enriched_clean['params'].apply(
+            lambda x: (
+                {k.lower(): v for k, v in (x or {}).items()}
+                if isinstance(x, dict) else x
+            )
+        )
+
+    duckdb_conn.register('enriched_metrics', enriched_clean)
 
     context.log.info("Creating metric time series data...")
 
@@ -298,17 +340,23 @@ def metric_timeseries(context, enriched: pd.DataFrame) -> pd.DataFrame:
         warning_threshold,
         unit,
         description,
-        -- Additional context for hover tooltips (handle duplicate keys)
-        json_group_object(
-            LOWER(param_key),
-            COALESCE(param_value, 'null')
-        ) FILTER (
-            WHERE LOWER(param_key) IN ('model_type', 'dataset', 'version')
-        ) as key_params,
+        -- Additional context for hover tooltips (extract from normalized params)
+        CASE WHEN params IS NOT NULL THEN
+            json_object(
+                'model_type', params['model_type'],
+                'dataset', params['dataset'],
+                'version', params['version']
+            )
+        ELSE
+            json_object()
+        END as key_params,
 
         -- Summary metrics for this run (for tooltip)
         (
-            SELECT json_group_object(metric_name, metric_value)
+            SELECT json_group_object(
+                COALESCE(metric_name, 'unknown'),
+                metric_value
+            ) FILTER (WHERE metric_name IS NOT NULL)
             FROM enriched_metrics e2
             WHERE e2.run_id = e1.run_id
         ) as run_summary_metrics,
@@ -316,21 +364,6 @@ def metric_timeseries(context, enriched: pd.DataFrame) -> pd.DataFrame:
         extraction_timestamp,
         enrichment_timestamp
     FROM enriched_metrics e1
-    CROSS JOIN (
-        SELECT
-            UNNEST(['model_type', 'dataset', 'version']) as param_key,
-            UNNEST([
-                COALESCE(
-                    params['model_type'], params['Model_Type'], params['MODEL_TYPE']
-                ),
-                COALESCE(
-                    params['dataset'], params['Dataset'], params['DATASET']
-                ),
-                COALESCE(
-                    params['version'], params['Version'], params['VERSION']
-                )
-            ]) as param_value
-    ) AS param_data
     WHERE start_time >= CAST(CURRENT_TIMESTAMP AS TIMESTAMP) - INTERVAL '30 days'
     GROUP BY
         start_time, run_id, run_name, user_id, experiment_name, metric_name,
