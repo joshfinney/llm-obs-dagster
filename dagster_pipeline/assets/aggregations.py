@@ -236,7 +236,7 @@ def application_summary(
         s.warning_runs,
         s.healthy_runs,
         s.pass_rate,
-        -- Aggregate metrics summary as JSON (filter out null keys)
+        -- Aggregate metrics summary as JSON (filter out null keys at join level)
         json_group_object(
             COALESCE(ms.metric_name, 'unknown'),
             json_object(
@@ -247,10 +247,11 @@ def application_summary(
                 'display_name', ms.display_name,
                 'unit', ms.unit
             )
-        ) FILTER (WHERE ms.metric_name IS NOT NULL) as metrics_summary,
+        ) as metrics_summary,
         CAST(CURRENT_TIMESTAMP AS TIMESTAMP) as aggregation_timestamp
     FROM app_summary s
     LEFT JOIN app_metrics_summary ms ON s.application = ms.application
+        AND ms.metric_name IS NOT NULL
     GROUP BY s.time_hour, s.application, s.total_runs, s.critical_runs,
              s.warning_runs, s.healthy_runs, s.pass_rate
     ORDER BY s.application, s.time_hour DESC
@@ -340,12 +341,13 @@ def metric_timeseries(
         warning_threshold,
         unit,
         description,
-        -- Additional context for hover tooltips (extract from normalized params)
+        -- Additional context for hover tooltips (use available param keys)
         CASE WHEN params IS NOT NULL THEN
             json_object(
-                'model_type', params['model_type'],
-                'dataset', params['dataset'],
-                'version', params['version']
+                'model', COALESCE(params['model'], params['model_name']),
+                'eval_type', params['eval_type'],
+                'do_sample', params['do_sample'],
+                'top_p', params['top_p']
             )
         ELSE
             json_object()
@@ -353,12 +355,10 @@ def metric_timeseries(
 
         -- Summary metrics for this run (for tooltip)
         (
-            SELECT json_group_object(
-                COALESCE(metric_name, 'unknown'),
-                metric_value
-            ) FILTER (WHERE metric_name IS NOT NULL)
+            SELECT json_group_object(metric_name, metric_value)
             FROM enriched_metrics e2
             WHERE e2.run_id = e1.run_id
+                AND e2.metric_name IS NOT NULL
         ) as run_summary_metrics,
 
         extraction_timestamp,
