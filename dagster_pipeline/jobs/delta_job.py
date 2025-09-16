@@ -14,7 +14,7 @@ from dagster_pipeline.resources.api_clients import (
 )
 from dagster_pipeline.resources.duckdb_resource import duckdb_resource
 from dagster_pipeline.resources.mlflow_resource import mlflow_resource
-from dagster_pipeline.resources.s3_io_manager import s3_parquet_io_manager
+from dagster_pipeline.resources.io_manager import get_parquet_io_manager
 
 
 @job(
@@ -26,7 +26,7 @@ from dagster_pipeline.resources.s3_io_manager import s3_parquet_io_manager
         "metrics_api": metrics_api_resource,
         "thresholds_api": thresholds_api_resource,
         "settings": settings_resource,
-        "s3_parquet_io": s3_parquet_io_manager
+        "s3_parquet_io": get_parquet_io_manager()
     },
     config=RunConfig(
         ops={
@@ -72,7 +72,7 @@ def delta_ingestion_job():
         "metrics_api": metrics_api_resource,
         "thresholds_api": thresholds_api_resource,
         "settings": settings_resource,
-        "s3_parquet_io": s3_parquet_io_manager
+        "s3_parquet_io": get_parquet_io_manager()
     },
     config=RunConfig(
         ops={

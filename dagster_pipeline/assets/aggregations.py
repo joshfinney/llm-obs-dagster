@@ -324,22 +324,6 @@ def metric_timeseries(
 
     context.log.info("Creating metric time series data...")
 
-    # Debug: Test a simple query first to isolate the casting issue
-    try:
-        debug_result = duckdb_conn.execute("""
-            SELECT COUNT(*) as row_count,
-                   COUNT(CASE WHEN params IS NULL THEN 1 END) as null_params
-            FROM enriched_metrics
-        """).fetchall()
-        context.log.info(f"Debug query result: {debug_result[0]}")
-    except Exception as e:
-        context.log.error(f"Debug query failed: {e}")
-        # The issue is in the params column itself - let's exclude it
-        duckdb_conn.execute("DROP TABLE IF EXISTS enriched_metrics")
-        enriched_no_params = enriched_clean.drop(columns=['params'], errors='ignore')
-        duckdb_conn.register('enriched_metrics', enriched_no_params)
-        context.log.info("Registered table without params column")
-
     # Debug param data structure to understand casting issues
     if not enriched_clean.empty and 'params' in enriched_clean.columns:
         param_keys = set()
@@ -388,10 +372,16 @@ def metric_timeseries(
         warning_threshold,
         unit,
         description,
-        -- Skip param extraction - all values are None/null based on debug logs
-        -- When real param data exists, uncomment and modify below:
-        -- json_object('model', CAST(params['model'] AS VARCHAR)) as key_params,
-        json_object() as key_params,
+        -- Additional context for hover tooltips
+        CASE WHEN params IS NOT NULL THEN
+            json_object(
+                'model', CASE WHEN params['model'] IS NOT NULL
+                            THEN CAST(params['model'] AS VARCHAR)
+                            ELSE 'unknown' END
+            )
+        ELSE
+            json_object()
+        END as key_params,
 
         -- Summary metrics for this run (for tooltip)
         (
@@ -408,7 +398,7 @@ def metric_timeseries(
     GROUP BY
         start_time, run_id, run_name, user_id, experiment_name, metric_name,
         display_name, metric_value, status, moving_avg_24h, forecast_next,
-        critical_threshold, warning_threshold, unit, description,
+        critical_threshold, warning_threshold, unit, description, params,
         extraction_timestamp, enrichment_timestamp
     ORDER BY experiment_name, metric_name, start_time
     """
