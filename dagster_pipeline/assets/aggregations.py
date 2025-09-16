@@ -324,6 +324,23 @@ def metric_timeseries(
 
     context.log.info("Creating metric time series data...")
 
+    # Log param key analysis for debugging
+    if not enriched_clean.empty and 'params' in enriched_clean.columns:
+        param_keys = set()
+        null_count = 0
+        total_count = len(enriched_clean)
+
+        for params_dict in enriched_clean['params'].dropna():
+            if isinstance(params_dict, dict):
+                param_keys.update(params_dict.keys())
+            else:
+                null_count += 1
+
+        context.log.info(
+            f"Param analysis: Found keys {sorted(param_keys)}, "
+            f"null percentage: {(null_count/total_count)*100:.1f}%"
+        )
+
     timeseries_query = """
     SELECT
         start_time as timestamp,
@@ -341,13 +358,11 @@ def metric_timeseries(
         warning_threshold,
         unit,
         description,
-        -- Additional context for hover tooltips (use available param keys)
+        -- Additional context for hover tooltips (only use verified keys)
         CASE WHEN params IS NOT NULL THEN
             json_object(
-                'model', COALESCE(params['model'], params['model_name']),
-                'eval_type', params['eval_type'],
-                'do_sample', params['do_sample'],
-                'top_p', params['top_p']
+                'model', TRY_CAST(params['model'] AS VARCHAR),
+                'eval_type', TRY_CAST(params['eval_type'] AS VARCHAR)
             )
         ELSE
             json_object()
@@ -368,7 +383,7 @@ def metric_timeseries(
     GROUP BY
         start_time, run_id, run_name, user_id, experiment_name, metric_name,
         display_name, metric_value, status, moving_avg_24h, forecast_next,
-        critical_threshold, warning_threshold, unit, description,
+        critical_threshold, warning_threshold, unit, description, params,
         extraction_timestamp, enrichment_timestamp
     ORDER BY experiment_name, metric_name, start_time
     """
