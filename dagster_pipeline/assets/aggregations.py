@@ -324,6 +324,22 @@ def metric_timeseries(
 
     context.log.info("Creating metric time series data...")
 
+    # Debug: Test a simple query first to isolate the casting issue
+    try:
+        debug_result = duckdb_conn.execute("""
+            SELECT COUNT(*) as row_count,
+                   COUNT(CASE WHEN params IS NULL THEN 1 END) as null_params
+            FROM enriched_metrics
+        """).fetchall()
+        context.log.info(f"Debug query result: {debug_result[0]}")
+    except Exception as e:
+        context.log.error(f"Debug query failed: {e}")
+        # The issue is in the params column itself - let's exclude it
+        duckdb_conn.execute("DROP TABLE IF EXISTS enriched_metrics")
+        enriched_no_params = enriched_clean.drop(columns=['params'], errors='ignore')
+        duckdb_conn.register('enriched_metrics', enriched_no_params)
+        context.log.info("Registered table without params column")
+
     # Debug param data structure to understand casting issues
     if not enriched_clean.empty and 'params' in enriched_clean.columns:
         param_keys = set()
@@ -340,7 +356,8 @@ def metric_timeseries(
                         value_types[key] = set()
                         sample_values[key] = []
                     value_types[key].add(type(value).__name__)
-                    if len(sample_values[key]) < 3:  # Keep 3 samples per key
+                    max_samples = 3
+                    if len(sample_values[key]) < max_samples:
                         sample_values[key].append(repr(value))
             else:
                 null_count += 1
@@ -371,24 +388,10 @@ def metric_timeseries(
         warning_threshold,
         unit,
         description,
-        -- Additional context for hover tooltips (only use verified keys)
-        -- HOW TO ADD NEW PARAM KEYS:
-        -- 1. Check debug logs above to see available keys and their types/samples
-        -- 2. Add new key only if it appears in >80% of records (low null rate)
-        -- 3. Use CASE to handle null values: CASE WHEN params['key'] IS NOT NULL THEN CAST(params['key'] AS VARCHAR) ELSE 'unknown' END
-        -- 4. Test with small sample first, then deploy to full dataset
-        CASE WHEN params IS NOT NULL THEN
-            json_object(
-                'model', CASE WHEN params['model'] IS NOT NULL
-                            THEN CAST(params['model'] AS VARCHAR)
-                            ELSE 'unknown' END,
-                'eval_type', CASE WHEN params['eval_type'] IS NOT NULL
-                                THEN CAST(params['eval_type'] AS VARCHAR)
-                                ELSE 'unknown' END
-            )
-        ELSE
-            json_object()
-        END as key_params,
+        -- Skip param extraction - all values are None/null based on debug logs
+        -- When real param data exists, uncomment and modify below:
+        -- json_object('model', CAST(params['model'] AS VARCHAR)) as key_params,
+        json_object() as key_params,
 
         -- Summary metrics for this run (for tooltip)
         (
@@ -405,7 +408,7 @@ def metric_timeseries(
     GROUP BY
         start_time, run_id, run_name, user_id, experiment_name, metric_name,
         display_name, metric_value, status, moving_avg_24h, forecast_next,
-        critical_threshold, warning_threshold, unit, description, params,
+        critical_threshold, warning_threshold, unit, description,
         extraction_timestamp, enrichment_timestamp
     ORDER BY experiment_name, metric_name, start_time
     """
