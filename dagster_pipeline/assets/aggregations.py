@@ -86,7 +86,7 @@ def platform_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
         COALESCE(pass_rate_trend, 0) as pass_rate_trend,
         recent_run_ids,
         active_applications,
-        CURRENT_TIMESTAMP as aggregation_timestamp
+        CAST(CURRENT_TIMESTAMP AS TIMESTAMP) as aggregation_timestamp
     FROM trending
     ORDER BY time_hour DESC
     """
@@ -177,14 +177,14 @@ def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
             MAX(metric_value) as max_value,
 
             -- Latest measurement
-            FIRST_VALUE(metric_value ORDER BY start_time DESC) as latest_value,
-            FIRST_VALUE(status ORDER BY start_time DESC) as latest_status,
-            FIRST_VALUE(moving_avg_24h ORDER BY start_time DESC) as latest_moving_avg,
+            arg_max(metric_value, start_time) as latest_value,
+            arg_max(status, start_time) as latest_status,
+            arg_max(moving_avg_24h, start_time) as latest_moving_avg,
 
             -- Trend calculation
             CORR(EXTRACT(EPOCH FROM start_time), metric_value) as trend_correlation
         FROM enriched_metrics
-        WHERE start_time >= NOW() - INTERVAL '7 days'  -- Last week for trends
+        WHERE start_time >= CAST(CURRENT_TIMESTAMP AS TIMESTAMP) - INTERVAL '7 days'
         GROUP BY experiment_name, metric_name, display_name, category, unit
     ),
     app_summary AS (
@@ -209,18 +209,18 @@ def application_summary(context, enriched: pd.DataFrame) -> pd.DataFrame:
         s.healthy_runs,
         s.pass_rate,
         -- Aggregate metrics summary as JSON
-        OBJECT_AGG(
+        json_group_object(
             ms.metric_name,
-            {
-                'latest_value': ms.latest_value,
-                'latest_status': ms.latest_status,
-                'avg_value': ms.avg_value,
-                'trend': ms.trend_correlation,
-                'display_name': ms.display_name,
-                'unit': ms.unit
-            }
+            json_object(
+                'latest_value', ms.latest_value,
+                'latest_status', ms.latest_status,
+                'avg_value', ms.avg_value,
+                'trend', ms.trend_correlation,
+                'display_name', ms.display_name,
+                'unit', ms.unit
+            )
         ) as metrics_summary,
-        CURRENT_TIMESTAMP as aggregation_timestamp
+        CAST(CURRENT_TIMESTAMP AS TIMESTAMP) as aggregation_timestamp
     FROM app_summary s
     LEFT JOIN app_metrics_summary ms ON s.application = ms.application
     GROUP BY s.time_hour, s.application, s.total_runs, s.critical_runs,
@@ -298,31 +298,40 @@ def metric_timeseries(context, enriched: pd.DataFrame) -> pd.DataFrame:
         warning_threshold,
         unit,
         description,
-        -- Additional context for hover tooltips
-        OBJECT_AGG(
-            param_key, param_value
+        -- Additional context for hover tooltips (handle duplicate keys)
+        json_group_object(
+            LOWER(param_key),
+            COALESCE(param_value, 'null')
         ) FILTER (
-            WHERE param_key IN ('model_type', 'dataset', 'version')
+            WHERE LOWER(param_key) IN ('model_type', 'dataset', 'version')
         ) as key_params,
 
         -- Summary metrics for this run (for tooltip)
         (
-            SELECT OBJECT_AGG(metric_name, metric_value)
+            SELECT json_group_object(metric_name, metric_value)
             FROM enriched_metrics e2
             WHERE e2.run_id = e1.run_id
         ) as run_summary_metrics,
 
         extraction_timestamp,
         enrichment_timestamp
-    FROM enriched_metrics e1,
-    UNNEST(
-        ARRAY[
-            ['model_type', params['model_type']],
-            ['dataset', params['dataset']],
-            ['version', params['version']]
-        ]
-    ) AS t(param_key, param_value)
-    WHERE start_time >= NOW() - INTERVAL '30 days'  -- Last 30 days for charts
+    FROM enriched_metrics e1
+    CROSS JOIN (
+        SELECT
+            UNNEST(['model_type', 'dataset', 'version']) as param_key,
+            UNNEST([
+                COALESCE(
+                    params['model_type'], params['Model_Type'], params['MODEL_TYPE']
+                ),
+                COALESCE(
+                    params['dataset'], params['Dataset'], params['DATASET']
+                ),
+                COALESCE(
+                    params['version'], params['Version'], params['VERSION']
+                )
+            ]) as param_value
+    ) AS param_data
+    WHERE start_time >= CAST(CURRENT_TIMESTAMP AS TIMESTAMP) - INTERVAL '30 days'
     GROUP BY
         start_time, run_id, run_name, user_id, experiment_name, metric_name,
         display_name, metric_value, status, moving_avg_24h, forecast_next,
@@ -348,8 +357,12 @@ def metric_timeseries(context, enriched: pd.DataFrame) -> pd.DataFrame:
             result,
             metadata={
                 "timeseries_points": len(result),
-                "applications": result['application'].nunique() if len(result) > 0 else 0,
-                "metrics": result['metric_name'].nunique() if len(result) > 0 else 0,
+                "applications": (
+                    result['application'].nunique() if len(result) > 0 else 0
+                ),
+                "metrics": (
+                    result['metric_name'].nunique() if len(result) > 0 else 0
+                ),
                 "date_range_start": (
                     result['timestamp'].min().isoformat() if len(result) > 0 else None
                 ),
